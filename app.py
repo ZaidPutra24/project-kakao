@@ -8,6 +8,7 @@ import io
 import base64
 import textwrap
 from pathlib import Path
+import gdown
 
 import plotly.graph_objects as go
 
@@ -233,9 +234,14 @@ CLASS_COLORS = {
     "posfor": "#ffb703",
 }
 
-TIMM_MODEL_NAME = "vit_base_patch16_224"
-MODEL_PATH = Path(__file__).resolve().parent / "vit_kakao.pth"
+TIMM_MODEL_NAME = "swin_tiny_patch4_window7_224"
+MODEL_PATH = Path(__file__).resolve().parent / "swin_kakao.pth"
 MODEL_VAL_ACCURACY = 0.976
+
+# Bobot model (.pth) berukuran besar sehingga tidak disimpan di repo GitHub
+# (lihat .gitignore). Sebagai gantinya, file di-hosting di Google Drive dan
+# diunduh secara otomatis saat aplikasi pertama kali dijalankan.
+GDRIVE_FILE_ID = "1smdt6bV4xQkbpCXQ653FJPLg-g0_R4Es"
 
 REKOMENDASI = {
     "nitrogen": {
@@ -273,9 +279,28 @@ REKOMENDASI = {
 # =========================================================
 # 4. FUNGSI INTI
 # =========================================================
-@st.cache_resource(show_spinner="Memuat model ViT...")
+def download_model_if_needed():
+    """Unduh bobot model dari Google Drive jika belum ada secara lokal."""
+    if MODEL_PATH.exists():
+        return True
+    try:
+        with st.spinner("Mengunduh bobot model dari Google Drive (hanya sekali)..."):
+            gdown.download(
+                id=GDRIVE_FILE_ID,
+                output=str(MODEL_PATH),
+                quiet=False,
+            )
+        return MODEL_PATH.exists()
+    except Exception as e:
+        st.error(f"Gagal mengunduh model dari Google Drive: {e}")
+        return False
+
+
+@st.cache_resource(show_spinner="Memuat model Swin Transformer...")
 def load_model():
     try:
+        if not download_model_if_needed():
+            return None
         model = timm.create_model(TIMM_MODEL_NAME, pretrained=False, num_classes=len(CLASSES))
         state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
         model.load_state_dict(state_dict)
@@ -285,7 +310,8 @@ def load_model():
     except FileNotFoundError:
         st.error(
             f"File model **`{MODEL_PATH.name}`** tidak ditemukan di folder `{MODEL_PATH.parent}`.\n\n"
-            "Letakkan file bobot tersebut pada folder yang sama dengan `app.py`, lalu muat ulang halaman."
+            "Pastikan GDRIVE_FILE_ID benar dan file dibagikan dengan akses "
+            "\"Anyone with the link\", lalu muat ulang halaman."
         )
         return None
     except Exception as e:
@@ -347,8 +373,8 @@ with st.sidebar:
     md("<div style='height:16px'></div>")
     md(f"""
     <div class="nc-info-box">
-        <div class="nc-info-row"><span>Model</span><b>Vision Transformer</b></div>
-        <div class="nc-info-row"><span>Arsitektur</span><b>vit_base_patch16_224</b></div>
+        <div class="nc-info-row"><span>Model</span><b>Swin Transformer</b></div>
+        <div class="nc-info-row"><span>Arsitektur</span><b>{TIMM_MODEL_NAME}</b></div>
         <div class="nc-info-row"><span>Akurasi Validasi</span><b>{MODEL_VAL_ACCURACY*100:.1f}%</b></div>
         <div class="nc-info-row"><span>Jumlah Kelas</span><b>{len(CLASSES)}</b></div>
     </div>
@@ -363,7 +389,7 @@ md(f"""
     <h1>NutriCocoa AI</h1>
 </div>
 <p class="nc-subtitle">
-    Dashboard deteksi defisiensi unsur hara pada daun kakao menggunakan model Vision Transformer (ViT).
+    Dashboard deteksi defisiensi unsur hara pada daun kakao menggunakan model Swin Transformer.
     Unggah citra daun melalui panel di samping untuk memulai analisis.
 </p>
 """)
@@ -388,7 +414,7 @@ if uploaded_file is None:
 
     steps = [
         ("01", "Unggah Foto", "Ambil foto daun kakao dengan pencahayaan cukup dan fokus yang jelas."),
-        ("02", "Model Menganalisis", "Model ViT memproses citra dan menghitung probabilitas tiap kelas hara."),
+        ("02", "Model Menganalisis", "Model Swin Transformer memproses citra dan menghitung probabilitas tiap kelas hara."),
         ("03", "Lihat Rekomendasi", "Dapatkan diagnosis beserta rekomendasi pemupukan yang sesuai."),
     ]
     cols = st.columns(3)
